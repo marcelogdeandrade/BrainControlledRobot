@@ -229,25 +229,17 @@ int main(void){
   /* Configura USART0 para comunicacao com o HM-10 */
   USART0_init();
 
-  //usart_putString("AT+CONA81B6AAB9CD4");
-  //usart_getString(bufferRX);
-  delay_s(1);
-  printf("AT+ADDR?\r\n");
-  delay_s(1);
-  //sprintf(bufferTX, "%s", "AT+ADDR?");
-  usart_putString("AT+ADDR?");
+  usart_putString("AT+BAUD3");
+  usart_getString(bufferRX);
+  usart_putString("AT+ROLE1");
+  usart_getString(bufferRX);
+  usart_putString("AT+ADDR");
   usart_getString(bufferRX);
 
- // printf(bufferRX);
  
   /* Inicializa funcao de delay */
   delay_init( sysclk_get_cpu_hz());
         
 	while (1) {
-		printf("teste");
-		//pin_toggle(LED_PIO, LED_PIN_MASK);
-		usart_putString(bufferTX);
-		//printf("%s", bufferRX);
-		delay_s(1);
 	}
 }

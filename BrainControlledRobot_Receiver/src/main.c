@@ -1,4 +1,7 @@
 #include "asf.h"
+#include "stdio_serial.h"
+#include "conf_board.h"
+#include "conf_clock.h"
 
 /**
  * LEDs
@@ -8,14 +11,39 @@
 #define LED_PIN		      8
 #define LED_PIN_MASK    (1<<LED_PIN)
 
-/**
- * Botão
- */
-#define BUT_PIO_ID            ID_PIOA
-#define BUT_PIO               PIOA
-#define BUT_PIN		            11
-#define BUT_PIN_MASK          (1 << BUT_PIN)
-#define BUT_DEBOUNCING_VALUE  79
+//pinos da ponte H
+#define PIN1_PIO_ID		ID_PIOD
+#define PIN1_PIO		PIOD
+#define PIN1_PIN		30
+#define PIN1_PIN_MASK	(1 << PIN1_PIN)
+
+#define PIN2_PIO_ID		ID_PIOA
+#define PIN2_PIO		PIOA
+#define PIN2_PIN		6
+#define PIN2_PIN_MASK	(1 << PIN2_PIN)
+
+#define PIN3_PIO_ID		ID_PIOC
+#define PIN3_PIO		PIOC
+#define PIN3_PIN		19
+#define PIN3_PIN_MASK	(1 << PIN3_PIN)
+
+#define PIN4_PIO_ID		ID_PIOA
+#define PIN4_PIO		PIOA
+#define PIN4_PIN		2
+#define PIN4_PIN_MASK	(1 << PIN4_PIN)
+
+
+/** PWM frequency in Hz */
+#define PWM_FREQUENCY      1000
+/** Period value of PWM output waveform */
+#define PERIOD_VALUE       100
+/** Initial duty cycle value */
+#define INIT_DUTY_VALUE    0
+
+#define STRING_EOL    "\r"
+#define STRING_HEADER "-- PWM LED Example --\r\n" \
+"-- "BOARD_NAME" --\r\n" \
+"-- Compiled: "__DATE__" "__TIME__" --"STRING_EOL
 
 /** 
  *  USART
@@ -29,61 +57,20 @@
   uint8_t bufferRX[100];
   uint8_t bufferTX[100];
 volatile uint8_t flag_led0 = 1;
+volatile uint32_t flag;
+
+/** PWM channel instance for LEDs */
+volatile pwm_channel_t g_pwm_channel_led;
 
 /************************************************************************/
 /* PROTOTYPES                                                           */
 /************************************************************************/
 
-void BUT_init(void);
 void LED_init(int estado);
-void pin_toggle(Pio *pio, uint32_t mask);
-
-/************************************************************************/
-/* Handlers                                                             */
-/************************************************************************/
-
-/**
- *  Handle Interrupcao botao 1
- */
-static void Button1_Handler(uint32_t id, uint32_t mask)
-{
-  pin_toggle(PIOD, (1<<28));
-  pin_toggle(LED_PIO, LED_PIN_MASK);
-}
-
 
 /************************************************************************/
 /* Funcoes                                                              */
 /************************************************************************/
-
-/** 
- *  Toggle pin controlado pelo PIO (out)
- */
-void pin_toggle(Pio *pio, uint32_t mask){
-   if(pio_get_output_data_status(pio, mask))
-    pio_clear(pio, mask);
-   else
-    pio_set(pio,mask);
-}
-
-/**
- * @Brief Inicializa o pino do BUT
- */
-void BUT_init(void){
-    /* config. pino botao em modo de entrada */
-    pmc_enable_periph_clk(BUT_PIO_ID);
-    pio_set_input(BUT_PIO, BUT_PIN_MASK, PIO_PULLUP | PIO_DEBOUNCE);
-    
-    /* config. interrupcao em borda de descida no botao do kit */
-    /* indica funcao (but_Handler) a ser chamada quando houver uma interrupção */
-    pio_enable_interrupt(BUT_PIO, BUT_PIN_MASK);
-    pio_handler_set(BUT_PIO, BUT_PIO_ID, BUT_PIN_MASK, PIO_IT_FALL_EDGE, Button1_Handler);
-    
-    /* habilita interrupçcão do PIO que controla o botao */
-    /* e configura sua prioridade                        */
-    NVIC_EnableIRQ(BUT_PIO_ID);
-    NVIC_SetPriority(BUT_PIO_ID, 1);
-};
 
 /**
  * @Brief Inicializa o pino do LED
@@ -179,14 +166,6 @@ uint32_t usart_getString(uint8_t *pstring){
   uint32_t i = 0 ;
   
   usart_serial_getchar(USART0, (pstring+i));
-  //while(*(pstring+i) != 170){
-  	//pio_clear(LED_PIO, LED_PIN_MASK);
-	//delay_s(1);
-	//pio_set(LED_PIO, LED_PIN_MASK);
-	//printf("%c", *(pstring + i));
-    //usart_serial_getchar(USART0, (pstring+(++i)));
-  //}
-  //*(pstring+i+1)= 0x00;
   return(i);
   
 }
@@ -200,6 +179,125 @@ uint32_t usart_getString(uint8_t *pstring){
 	  }
   }
 
+
+/**
+ * \brief Interrupt handler for the PWM controller.
+ */
+void PWM0_Handler(void)
+{
+
+	uint32_t events = pwm_channel_get_interrupt_status(PWM0);
+	
+
+	if ((events & (1 << PIN_PWM_LED0_CHANNEL)) == (1 << PIN_PWM_LED0_CHANNEL)) {
+		if(flag){
+			g_pwm_channel_led.channel = PIN_PWM_LED0_CHANNEL;
+			pwm_channel_update_duty(PWM0, &g_pwm_channel_led, 50);
+		}
+		else{
+			g_pwm_channel_led.channel = PIN_PWM_LED0_CHANNEL;
+			pwm_channel_update_duty(PWM0, &g_pwm_channel_led, 100);
+		}
+	}
+}
+
+
+void Motor_state(uint32_t state){
+	
+	if(state){
+		flag = 1;
+	}
+	else{
+		flag = 0;
+	}
+	
+};
+
+void PWM0_Init(){
+	/* Enable PWM peripheral clock */
+	pmc_enable_periph_clk(ID_PWM0);
+
+
+	/* Disable PWM channels for LEDs */
+	pwm_channel_disable(PWM0, PIN_PWM_LED0_CHANNEL);
+	pwm_channel_disable(PWM0, PIN_PWM_LED1_CHANNEL);
+
+
+	/* Set PWM clock A as PWM_FREQUENCY*PERIOD_VALUE (clock B is not used) */
+	pwm_clock_t clock_setting = {
+		.ul_clka = PWM_FREQUENCY * PERIOD_VALUE,
+		.ul_clkb = 0,
+		.ul_mck = sysclk_get_cpu_hz()
+	};
+
+	pwm_init(PWM0, &clock_setting);
+
+	/* Initialize PWM channel for LED0 */
+	/* Period is left-aligned */
+	g_pwm_channel_led.alignment = PWM_ALIGN_LEFT;
+	/* Output waveform starts at a low level */
+	g_pwm_channel_led.polarity = PWM_LOW;
+	/* Use PWM clock A as source clock */
+	g_pwm_channel_led.ul_prescaler = PWM_CMR_CPRE_CLKA;
+	/* Period value of output waveform */
+	g_pwm_channel_led.ul_period = PERIOD_VALUE;
+	/* Duty cycle value of output waveform */
+	g_pwm_channel_led.ul_duty = 100;
+	g_pwm_channel_led.channel = PIN_PWM_LED0_CHANNEL;
+
+	pwm_channel_init(PWM0, &g_pwm_channel_led);
+
+	/* Enable channel counter event interrupt */
+	pwm_channel_enable_interrupt(PWM0, PIN_PWM_LED0_CHANNEL, 0);
+
+	/* Configure interrupt and enable PWM interrupt */
+	NVIC_DisableIRQ(PWM0_IRQn);
+	NVIC_ClearPendingIRQ(PWM0_IRQn);
+	NVIC_SetPriority(PWM0_IRQn, 0);
+	NVIC_EnableIRQ(PWM0_IRQn);
+	
+	/* Enable PWM channels for LEDs */
+	pwm_channel_enable(PWM0, PIN_PWM_LED0_CHANNEL);
+
+}
+
+void hbridge_Init(){
+	
+	pmc_enable_periph_clk(PIN1_PIO_ID);
+	pmc_enable_periph_clk(PIN2_PIO_ID);
+	pmc_enable_periph_clk(PIN3_PIO_ID);
+	pmc_enable_periph_clk(PIN4_PIO_ID);
+	
+	pio_set_output(PIN1_PIO, PIN1_PIN_MASK, 1, 0, 0);
+	pio_set_output(PIN2_PIO, PIN2_PIN_MASK, 0, 0, 0);
+	pio_set_output(PIN2_PIO, PIN3_PIN_MASK, 1, 0, 0);
+	pio_set_output(PIN2_PIO, PIN4_PIN_MASK, 0, 0, 0);
+}
+
+void get_eeg_data(void)
+{
+	pio_set(LED_PIO, LED_PIN_MASK);
+	usart_serial_getchar(USART0, &c);
+	usart_serial_getchar(USART0, &d);
+	if (c == 170 && d == 170){
+		usart_serial_getchar(USART0, &c);
+		if (c == 4) {
+			usart_serial_getchar(USART0, &c);
+			if (c == 128) {
+				usart_serial_getchar(USART0, &c);
+				if (c == 2) {
+					usart_serial_getchar(USART0, &c);
+					usart_serial_getchar(USART0, &d);
+					int rawValue = ((int)c << 8) | d;
+					Motor_state(1);
+					pio_clear(LED_PIO, LED_PIN_MASK);
+					printf("%d \n", rawValue);
+				}
+			}
+		}
+	}
+}
+
 /************************************************************************/
 /* Main Code	                                                        */
 /************************************************************************/
@@ -208,58 +306,33 @@ int main(void){
 
   /* Initialize the SAM system */
   sysclk_init();
-   
-  /* Disable the watchdog */
-  WDT->WDT_MR = WDT_MR_WDDIS;
+  board_init();
   
   /* Inicializa com serial com PC*/
   configure_console();
-  
-  /* Configura Leds */
-  LED_init(1);
-  
-  /* Configura os botões */
-  //BUT_init();  
-  
+ 
   /* Configura USART0 para comunicacao com o HM-10 */
   USART0_init();
 
-  delay_s(1);
-  printf("AT+MODE1\r\n");
+  LED_init(1);
 
-  delay_s(1);
   sprintf(bufferTX, "%s", "AT+CONA81B6AAB4B86");
-  //sprintf(bufferTX, "%s", "AT+ROLE1");
-  usart_putString(bufferTX);
-  usart_getString(bufferRX);
-
- // printf(bufferRX);
- char c;
+[]  usart_putString(bufferTX);
+[]
+[] char c;
  char d;
- char e;
+
   /* Inicializa funcao de delay */
   delay_init( sysclk_get_cpu_hz());
+
+  /**/
+  PWM0_Init();
+
+  /**/
+  hbridge_Init();
         
 	while (1) {
-		//sprintf(bufferTX, "%s \n", "OLA voce 2");
-		//pin_toggle(LED_PIO, LED_PIN_MASK);
-		//usart_getString(&c);
-		usart_serial_getchar(USART0, &c);
-		usart_serial_getchar(USART0, &d);
-		if (c == 170 && d == 170){
-			usart_serial_getchar(USART0, &c);
-			if (c == 4) {
-				usart_serial_getchar(USART0, &c);
-				if (c == 128) {
-					usart_serial_getchar(USART0, &c);
-					if (c == 2) {
-						usart_serial_getchar(USART0, &c);
-						usart_serial_getchar(USART0, &d);
-						int rawValue = ((int)c << 8) | d;
-						printf("%d \n", rawValue);
-					}
-				}
-			}
-		}
+		Motor_state(0);
+		get_eeg_data();
 	}
 }

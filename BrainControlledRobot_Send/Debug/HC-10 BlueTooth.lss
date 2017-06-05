@@ -5855,7 +5855,7 @@ int main(void){
   401f06:	4618      	mov	r0, r3
   401f08:	4b50      	ldr	r3, [pc, #320]	; (40204c <main+0x1ec>)
   401f0a:	4798      	blx	r3
-  printf("AT+ADDR?\r\n");
+  printf("AT+BAUD?\r\n");
   401f0c:	4850      	ldr	r0, [pc, #320]	; (402050 <main+0x1f0>)
   401f0e:	4b51      	ldr	r3, [pc, #324]	; (402054 <main+0x1f4>)
   401f10:	4798      	blx	r3
@@ -5908,7 +5908,7 @@ int main(void){
   401f94:	4b2d      	ldr	r3, [pc, #180]	; (40204c <main+0x1ec>)
   401f96:	4798      	blx	r3
   //sprintf(bufferTX, "%s", "AT+ADDR?");
-  usart_putString("AT+ADDR?");
+  usart_putString("AT+BAUD3");
   401f98:	482f      	ldr	r0, [pc, #188]	; (402058 <main+0x1f8>)
   401f9a:	4b30      	ldr	r3, [pc, #192]	; (40205c <main+0x1fc>)
   401f9c:	4798      	blx	r3
@@ -16078,11 +16078,11 @@ int main(void){
   4087e8:	00000000 	.word	0x00000000
   4087ec:	00006325 	.word	0x00006325
   4087f0:	00007325 	.word	0x00007325
-  4087f4:	412b5441 	.word	0x412b5441
-  4087f8:	3f524444 	.word	0x3f524444
+  4087f4:	422b5441 	.word	0x422b5441
+  4087f8:	3f445541 	.word	0x3f445541
   4087fc:	00000a0d 	.word	0x00000a0d
-  408800:	412b5441 	.word	0x412b5441
-  408804:	3f524444 	.word	0x3f524444
+  408800:	422b5441 	.word	0x422b5441
+  408804:	33445541 	.word	0x33445541
   408808:	00000000 	.word	0x00000000
   40880c:	74736574 	.word	0x74736574
   408810:	00000065 	.word	0x00000065
